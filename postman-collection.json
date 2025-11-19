@@ -1,0 +1,224 @@
+{
+  "info": {
+    "name": "Sniper Order Execution Engine",
+    "description": "API collection for testing the sniper order execution engine with HTTP and WebSocket endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Submit Sniper Order",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Save orderId to environment variable for other requests",
+              "const response = pm.response.json();",
+              "pm.environment.set('orderId', response.orderId);",
+              "pm.environment.set('wsUrl', response.wsUrl);",
+              "",
+              "// Tests",
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has orderId', function() {",
+              "    pm.expect(response.orderId).to.be.a('string');",
+              "});",
+              "",
+              "pm.test('Status is pending', function() {",
+              "    pm.expect(response.status).to.equal('pending');",
+              "});",
+              "",
+              "console.log('Order ID:', response.orderId);",
+              "console.log('WebSocket URL:', response.wsUrl);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tokenAddress\": \"TokenMintAddress123456789\",\n  \"amountIn\": 0.1,\n  \"slippage\": 5\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/orders/execute",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "orders", "execute"]
+        },
+        "description": "Submit a new sniper order. Returns orderId and WebSocket URL for status updates."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Order Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "",
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has order details', function() {",
+              "    pm.expect(response).to.have.property('id');",
+              "    pm.expect(response).to.have.property('status');",
+              "    pm.expect(response).to.have.property('token_address');",
+              "});",
+              "",
+              "console.log('Order Status:', response.status);",
+              "if (response.tx_hash) {",
+              "    console.log('Transaction Hash:', response.tx_hash);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/orders/{{orderId}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "orders", "{{orderId}}"]
+        },
+        "description": "Get the current status of an order by orderId. Uses the orderId from the previous request."
+      },
+      "response": []
+    },
+    {
+      "name": "Health Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "",
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Service is healthy', function() {",
+              "    pm.expect(response.status).to.equal('healthy');",
+              "});",
+              "",
+              "pm.test('All services connected', function() {",
+              "    pm.expect(response.services.postgres).to.equal('connected');",
+              "    pm.expect(response.services.redis).to.equal('connected');",
+              "    pm.expect(response.services.queue).to.equal('running');",
+              "});",
+              "",
+              "console.log('Health Status:', response.status);",
+              "console.log('Services:', JSON.stringify(response.services, null, 2));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["health"]
+        },
+        "description": "Check the health status of the server and all connected services (PostgreSQL, Redis, Queue)."
+      },
+      "response": []
+    },
+    {
+      "name": "Submit Multiple Orders (Concurrent Test)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "",
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Order queued successfully', function() {",
+              "    pm.expect(response.status).to.equal('pending');",
+              "});",
+              "",
+              "console.log('Order', pm.info.iteration + 1, '- ID:', response.orderId);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tokenAddress\": \"Token{{$randomInt}}\",\n  \"amountIn\": {{$randomPrice}},\n  \"slippage\": {{$randomInt}}\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/orders/execute",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "orders", "execute"]
+        },
+        "description": "Submit multiple orders with random data. Use Collection Runner to test concurrent processing (10 iterations)."
+      },
+      "response": []
+    },
+    {
+      "name": "WebSocket Status Stream",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "ws://localhost:3000/ws/orders/{{orderId}}",
+          "protocol": "ws",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["ws", "orders", "{{orderId}}"]
+        },
+        "description": "WebSocket connection for real-time order status updates. After submitting an order, use this with the returned orderId to see live status transitions:\n\n1. pending\n2. monitoring\n3. triggered\n4. routing\n5. building\n6. submitted\n7. confirmed/failed\n\nNote: In Postman, go to 'New' > 'WebSocket Request' and paste the URL with your orderId."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "wsUrl",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
