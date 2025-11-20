@@ -1,37 +1,43 @@
 {
   "info": {
     "name": "Sniper Order Execution Engine",
-    "description": "API collection for testing the sniper order execution engine with HTTP and WebSocket endpoints",
+    "description": "API collection for testing the sniper order execution engine with WebSocket-based order submission",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "Submit Sniper Order",
+      "name": "WebSocket - Submit Order & Stream Updates",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "ws://localhost:3000/api/orders/execute",
+          "protocol": "ws",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "orders", "execute"]
+        },
+        "description": "PRIMARY ENDPOINT: WebSocket connection for submitting orders and receiving real-time updates.\n\nHOW TO USE IN POSTMAN:\n1. Create a new 'WebSocket Request' in Postman\n2. Connect to: ws://localhost:3000/api/orders/execute\n3. Once connected, send this JSON message:\n\n{\n  \"tokenAddress\": \"B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP\",\n  \"amountIn\": \"100000000\",\n  \"slippage\": \"0.01\"\n}\n\n4. You'll receive ALL status updates in real-time:\n   - pending: Order queued\n   - monitoring: Checking for pools\n   - triggered: Pool detected\n   - routing: Comparing Raydium vs Meteora (with full quotes)\n   - building: Building transaction\n   - submitted: Transaction sent to blockchain\n   - confirmed: Success with txHash and Explorer link\n   - OR failed: Error details\n\nNO MISSED UPDATES - all status changes stream on the same connection!"
+      },
+      "response": []
+    },
+    {
+      "name": "HTTP POST - Submit Order (NOT SUPPORTED)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "// Save orderId to environment variable for other requests",
+              "pm.test('Returns 400 error', function() {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
               "const response = pm.response.json();",
-              "pm.environment.set('orderId', response.orderId);",
-              "pm.environment.set('wsUrl', response.wsUrl);",
-              "",
-              "// Tests",
-              "pm.test('Status code is 200', function() {",
-              "    pm.response.to.have.status(200);",
+              "pm.test('Asks for WebSocket connection', function() {",
+              "    pm.expect(response.error).to.equal('WebSocket connection required');",
               "});",
               "",
-              "pm.test('Response has orderId', function() {",
-              "    pm.expect(response.orderId).to.be.a('string');",
-              "});",
-              "",
-              "pm.test('Status is pending', function() {",
-              "    pm.expect(response.status).to.equal('pending');",
-              "});",
-              "",
-              "console.log('Order ID:', response.orderId);",
-              "console.log('WebSocket URL:', response.wsUrl);"
+              "console.log('Error message:', response.message);"
             ],
             "type": "text/javascript"
           }
@@ -47,7 +53,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"tokenAddress\": \"TokenMintAddress123456789\",\n  \"amountIn\": 0.1,\n  \"slippage\": 5\n}"
+          "raw": "{\n  \"tokenAddress\": \"B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP\",\n  \"amountIn\": \"100000000\",\n  \"slippage\": \"0.01\"\n}"
         },
         "url": {
           "raw": "http://localhost:3000/api/orders/execute",
@@ -56,7 +62,7 @@
           "port": "3000",
           "path": ["api", "orders", "execute"]
         },
-        "description": "Submit a new sniper order. Returns orderId and WebSocket URL for status updates."
+        "description": "This endpoint returns an error. Orders must be submitted via WebSocket to receive live updates.\n\nThis test verifies that the API correctly rejects HTTP POST requests."
       },
       "response": []
     },
@@ -82,6 +88,7 @@
               "console.log('Order Status:', response.status);",
               "if (response.tx_hash) {",
               "    console.log('Transaction Hash:', response.tx_hash);",
+              "    console.log('Explorer:', 'https://explorer.solana.com/tx/' + response.tx_hash + '?cluster=devnet');",
               "}"
             ],
             "type": "text/javascript"
@@ -98,7 +105,7 @@
           "port": "3000",
           "path": ["api", "orders", "{{orderId}}"]
         },
-        "description": "Get the current status of an order by orderId. Uses the orderId from the previous request."
+        "description": "Get the current status of an order by orderId.\n\nUseful for checking order status after WebSocket disconnection.\n\nReplace {{orderId}} with an actual order ID from a previous WebSocket submission."
       },
       "response": []
     },
@@ -145,80 +152,26 @@
         "description": "Check the health status of the server and all connected services (PostgreSQL, Redis, Queue)."
       },
       "response": []
-    },
-    {
-      "name": "Submit Multiple Orders (Concurrent Test)",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "const response = pm.response.json();",
-              "",
-              "pm.test('Status code is 200', function() {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "",
-              "pm.test('Order queued successfully', function() {",
-              "    pm.expect(response.status).to.equal('pending');",
-              "});",
-              "",
-              "console.log('Order', pm.info.iteration + 1, '- ID:', response.orderId);"
-            ],
-            "type": "text/javascript"
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"tokenAddress\": \"Token{{$randomInt}}\",\n  \"amountIn\": {{$randomPrice}},\n  \"slippage\": {{$randomInt}}\n}"
-        },
-        "url": {
-          "raw": "http://localhost:3000/api/orders/execute",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "orders", "execute"]
-        },
-        "description": "Submit multiple orders with random data. Use Collection Runner to test concurrent processing (10 iterations)."
-      },
-      "response": []
-    },
-    {
-      "name": "WebSocket Status Stream",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "ws://localhost:3000/ws/orders/{{orderId}}",
-          "protocol": "ws",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["ws", "orders", "{{orderId}}"]
-        },
-        "description": "WebSocket connection for real-time order status updates. After submitting an order, use this with the returned orderId to see live status transitions:\n\n1. pending\n2. monitoring\n3. triggered\n4. routing\n5. building\n6. submitted\n7. confirmed/failed\n\nNote: In Postman, go to 'New' > 'WebSocket Request' and paste the URL with your orderId."
-      },
-      "response": []
     }
   ],
   "variable": [
     {
       "key": "orderId",
       "value": "",
-      "type": "string"
-    },
+      "type": "string",
+      "description": "Order ID from WebSocket response - use for Get Order Status endpoint"
+    }
+  ],
+  "event": [
     {
-      "key": "wsUrl",
-      "value": "",
-      "type": "string"
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// This collection uses WebSocket for order submission",
+          "// Make sure your server is running at http://localhost:3000"
+        ]
+      }
     }
   ]
 }
