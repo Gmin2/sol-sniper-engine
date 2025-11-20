@@ -6,11 +6,32 @@ import { Pool } from 'pg';
 import { Redis } from 'ioredis';
 import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
+import { Connection, Keypair } from '@solana/web3.js';
+import bs58 from 'bs58';
+import BN from 'bn.js';
+
+import {
+  initializeRaydium,
+  checkRaydiumPoolExists,
+  getRaydiumSwapQuote,
+  executeRaydiumSwap,
+} from './integrations/raydium.ts';
+import {
+  initializeMeteora,
+  checkMeteoraPoolExists,
+  getMeteoraSwapQuote,
+  executeMeteoraSwap,
+} from './integrations/meteora.ts';
 
 dotenv.config();
 
 const CONFIG = {
   port: parseInt(process.env.PORT || '3000'),
+  solana: {
+    rpcUrl: process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com',
+    cluster: (process.env.SOLANA_CLUSTER || 'devnet') as 'mainnet' | 'devnet',
+    walletPrivateKey: process.env.WALLET_PRIVATE_KEY!,
+  },
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
@@ -29,6 +50,26 @@ const CONFIG = {
 };
 
 const pgPool = new Pool(CONFIG.database);
+
+async function initSolana() {
+  const connection = new Connection(CONFIG.solana.rpcUrl, 'confirmed');
+  const secretKey = bs58.decode(CONFIG.solana.walletPrivateKey);
+  const owner = Keypair.fromSecretKey(secretKey);
+
+  const dexConfig = {
+    connection,
+    owner,
+    cluster: CONFIG.solana.cluster,
+  };
+
+  console.log(' Initializing Raydium SDK...');
+  await initializeRaydium(dexConfig);
+
+  console.log(' Initializing Meteora SDK...');
+  await initializeMeteora(dexConfig);
+
+  console.log(' DEX SDKs initialized');
+}
 
 // Initialize database schema
 async function initDatabase() {
@@ -59,15 +100,12 @@ async function initDatabase() {
   }
 }
 
-// REDIS + BULLMQ SETUP
-
 const redisConnection = new Redis({
   host: CONFIG.redis.host,
   port: CONFIG.redis.port,
   maxRetriesPerRequest: null,
 });
 
-// Create BullMQ Queue
 const orderQueue = new Queue('sniper-orders', {
   connection: redisConnection,
 });
@@ -80,7 +118,8 @@ function broadcastToOrder(orderId: string, message: any) {
   if (connections) {
     const messageStr = JSON.stringify(message);
     connections.forEach((ws) => {
-      if (ws.readyState === 1) { // 1 = OPEN state for WebSocket
+      if (ws.readyState === 1) { 
+        // 1 = OPEN state for WebSocket
         ws.send(messageStr);
       }
     });
@@ -150,11 +189,11 @@ const worker = new Worker(
       });
       console.log(` Monitoring pool for token: ${order.tokenAddress}`);
 
-      // Simulate pool monitoring (checking every 2 seconds for 30 seconds max)
-      const poolFound = await simulatePoolMonitoring(orderId, order.tokenAddress);
+      // Check for pool existence
+      const poolCheck = await checkForPool(orderId, order.tokenAddress);
 
-      if (!poolFound) {
-        throw new Error('Pool not found within timeout');
+      if (!poolCheck.found) {
+        throw new Error('Pool not found on any DEX');
       }
 
       // STEP 3: TRIGGERED
@@ -176,7 +215,7 @@ const worker = new Worker(
       });
       console.log(` Fetching quotes from DEXs...`);
 
-      const bestRoute = await getBestRoute(order);
+      const bestRoute = await getBestRoute(order, poolCheck.raydiumPoolId, poolCheck.meteoraPoolId);
 
       broadcastToOrder(orderId, {
         orderId,
@@ -211,8 +250,9 @@ const worker = new Worker(
       });
       console.log(` Transaction submitted...`);
 
-      // Simulate transaction execution
-      const txHash = await simulateTransactionExecution(bestRoute, order);
+      // Execute real swap on chosen DEX (Raydium or Meteora)
+      const txHash = await executeTransaction(bestRoute, order);
+      // Wait a bit for blockchain confirmation
       await sleep(3000);
 
       // STEP 7: CONFIRMED
@@ -267,66 +307,180 @@ worker.on('failed', (job, err) => {
   console.log(` Job ${job?.id} failed after ${job?.attemptsMade} attempts:`, err.message);
 });
 
-// mock function to quickstart
+// Real pool detection using Raydium and Meteora
+async function checkForPool(orderId: string, tokenAddress: string): Promise<{ found: boolean; raydiumPoolId: string | null; meteoraPoolId: string | null }> {
+  console.log(` Checking for pools for token: ${tokenAddress}`);
 
-async function simulatePoolMonitoring(orderId: string, tokenAddress: string): Promise<boolean> {
-  // Simulate checking for pool every 2 seconds
-  // In real implementation, this would check Raydium/Meteora for pool existence
+  let raydiumPoolId: string | null = null;
+  let meteoraPoolId: string | null = null;
 
-  const maxAttempts = 15; // 30 seconds max
-  for (let i = 0; i < maxAttempts; i++) {
-    await sleep(2000);
+  // Check test-pools.json for known pools
+  const fs = await import('fs');
+  try {
+    const poolsData = JSON.parse(fs.readFileSync('test-pools.json', 'utf-8'));
 
-    // For demo: pool "found" after 6 seconds
-    if (i >= 2) {
-      return true;
+    // Check for Raydium pools
+    for (const [key, pool] of Object.entries(poolsData)) {
+      if (key.startsWith('raydium-pool')) {
+        const poolInfo: any = pool;
+        if (poolInfo.tokenMint === tokenAddress) {
+          raydiumPoolId = poolInfo.poolId;
+          console.log(`  Raydium pool found: ${raydiumPoolId}`);
+        }
+      }
     }
 
-    console.log(`  Checking for pool... attempt ${i + 1}/${maxAttempts}`);
+    // Check for Meteora pools
+    for (const [key, pool] of Object.entries(poolsData)) {
+      if (key.startsWith('meteora-pool')) {
+        const poolInfo: any = pool;
+        if (poolInfo.tokenMint === tokenAddress) {
+          meteoraPoolId = poolInfo.poolId;
+          console.log(`  Meteora pool found: ${meteoraPoolId}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.log('  No test-pools.json found, checking blockchain...');
   }
 
-  return false;
+  // If not found in file, check blockchain
+  if (!raydiumPoolId) {
+    const raydiumPoolInfo = await checkRaydiumPoolExists(tokenAddress);
+    if (raydiumPoolInfo.exists) {
+      raydiumPoolId = raydiumPoolInfo.poolId;
+      console.log(`  Raydium pool found on-chain: ${raydiumPoolId}`);
+    }
+  }
+
+  if (!meteoraPoolId) {
+    const meteoraPoolInfo = await checkMeteoraPoolExists(tokenAddress);
+    if (meteoraPoolInfo.exists) {
+      meteoraPoolId = meteoraPoolInfo.poolId;
+      console.log(`  Meteora pool found on-chain: ${meteoraPoolId}`);
+    }
+  }
+
+  const found = raydiumPoolId !== null || meteoraPoolId !== null;
+
+  if (!found) {
+    console.log('  No pools found on any DEX');
+  }
+
+  return { found, raydiumPoolId, meteoraPoolId };
 }
 
-async function getBestRoute(order: any) {
-  // Mock DEX quotes with slight price difference
-  const raydiumQuote = {
-    outputAmount: 95000 + Math.random() * 5000,
-    fee: 0.0025, // 0.25%
-  };
+async function getBestRoute(order: any, raydiumPoolId: string | null, meteoraPoolId: string | null) {
+  console.log(` Getting quotes from DEXs...`);
 
-  const meteoraQuote = {
-    outputAmount: 93000 + Math.random() * 7000,
-    fee: 0.002, // 0.20%
-  };
+  const inputAmount = new BN(order.amountIn);
+  const slippage = parseFloat(order.slippage);
 
-  console.log(` Raydium: ${raydiumQuote.outputAmount.toFixed(2)} tokens (fee: ${(raydiumQuote.fee * 100).toFixed(2)}%)`);
-  console.log(` Meteora: ${meteoraQuote.outputAmount.toFixed(2)} tokens (fee: ${(meteoraQuote.fee * 100).toFixed(2)}%)`);
+  let raydiumQuote, meteoraQuote;
 
-  const selectedDex = raydiumQuote.outputAmount > meteoraQuote.outputAmount ? 'raydium' : 'meteora';
-  const reason = raydiumQuote.outputAmount > meteoraQuote.outputAmount
-    ? 'Better output amount'
-    : 'Better output amount';
+  // Get Raydium quote
+  if (raydiumPoolId) {
+    try {
+      raydiumQuote = await getRaydiumSwapQuote(raydiumPoolId, 'So11111111111111111111111111111111111111112', inputAmount, slippage);
+      console.log(` Raydium: ${raydiumQuote.outputAmount.toString()} tokens (fee: ${raydiumQuote.tradeFee.toString()}, impact: ${raydiumQuote.priceImpact.toFixed(2)}%)`);
+    } catch (error: any) {
+      console.log(` Raydium quote failed: ${error.message}`);
+    }
+  } else {
+    console.log(` Raydium: No pool available`);
+  }
+
+  // Get Meteora quote
+  if (meteoraPoolId) {
+    try {
+      meteoraQuote = await getMeteoraSwapQuote(meteoraPoolId, 'So11111111111111111111111111111111111111112', inputAmount, slippage);
+      console.log(` Meteora: ${meteoraQuote.outputAmount.toString()} tokens (fee: ${meteoraQuote.tradeFee.toString()}, impact: ${meteoraQuote.priceImpact.toFixed(2)}%)`);
+    } catch (error: any) {
+      console.log(` Meteora quote failed: ${error.message}`);
+    }
+  } else {
+    console.log(` Meteora: No pool available`);
+  }
+
+  // Select best route based on output amount
+  if (!raydiumQuote && !meteoraQuote) {
+    throw new Error('No quotes available from any DEX');
+  }
+
+  let selectedDex: string;
+  let selectedPoolId: string;
+  let reason: string;
+
+  if (!meteoraQuote && raydiumQuote) {
+    selectedDex = 'raydium';
+    selectedPoolId = raydiumPoolId!;
+    reason = 'Only Raydium available';
+  } else if (!raydiumQuote && meteoraQuote) {
+    selectedDex = 'meteora';
+    selectedPoolId = meteoraPoolId!;
+    reason = 'Only Meteora available';
+  } else if (raydiumQuote && meteoraQuote) {
+    const raydiumOutput = raydiumQuote.outputAmount.toNumber();
+    const meteoraOutput = meteoraQuote.outputAmount.toNumber();
+
+    if (raydiumOutput > meteoraOutput) {
+      selectedDex = 'raydium';
+      selectedPoolId = raydiumPoolId!;
+      reason = `Better output: ${raydiumOutput.toLocaleString()} vs ${meteoraOutput.toLocaleString()}`;
+    } else {
+      selectedDex = 'meteora';
+      selectedPoolId = meteoraPoolId!;
+      reason = `Better output: ${meteoraOutput.toLocaleString()} vs ${raydiumOutput.toLocaleString()}`;
+    }
+  } else {
+    throw new Error('Unexpected state: quotes exist but cannot select DEX');
+  }
 
   console.log(`  Selected: ${selectedDex} (${reason})`);
 
   return {
     dex: selectedDex,
+    poolId: selectedPoolId,
     raydiumQuote,
     meteoraQuote,
+    selectedQuote: selectedDex === 'raydium' ? raydiumQuote : meteoraQuote,
     reason,
   };
 }
 
-async function simulateTransactionExecution(route: any, order: any): Promise<string> {
-  // Mock transaction hash
-  // In real implementation, this would execute actual swap on Solana
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let txHash = '';
-  for (let i = 0; i < 88; i++) {
-    txHash += chars.charAt(Math.floor(Math.random() * chars.length));
+async function executeTransaction(route: any, order: any): Promise<string> {
+  console.log(`  Executing swap on ${route.dex}...`);
+
+  const inputAmount = new BN(order.amountIn);
+  const slippage = parseFloat(order.slippage);
+
+  if (route.dex === 'raydium') {
+    const result = await executeRaydiumSwap(
+      route.poolId,
+      'So11111111111111111111111111111111111111112',
+      inputAmount,
+      slippage
+    );
+
+    console.log(`  Swap executed: ${result.txId}`);
+    console.log(`  Explorer: ${result.explorerUrl}`);
+
+    return result.txId;
+  } else if (route.dex === 'meteora') {
+    const result = await executeMeteoraSwap(
+      route.poolId,
+      'So11111111111111111111111111111111111111112',
+      inputAmount,
+      slippage
+    );
+
+    console.log(`  Swap executed: ${result.txId}`);
+    console.log(`  Explorer: ${result.explorerUrl}`);
+
+    return result.txId;
+  } else {
+    throw new Error(`Unknown DEX: ${route.dex}`);
   }
-  return txHash;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -344,82 +498,105 @@ app.register(websocket);
 // Register routes inside a plugin context
 app.register(async function (fastify) {
 
-// HTTP POST endpoint
+// Single endpoint that handles both HTTP and WebSocket
+// For WebSocket: Client connects, then sends order data as first message
+// For HTTP POST: Returns error asking client to use WebSocket
 fastify.post('/api/orders/execute', async (request, reply) => {
-  const order = request.body as any;
-
-  // Validate input
-  if (!order.tokenAddress || !order.amountIn || !order.slippage) {
-    return reply.code(400).send({
-      error: 'Invalid order',
-      message: 'tokenAddress, amountIn, and slippage are required',
-    });
-  }
-
-  // Generate order ID
-  const orderId = randomUUID();
-
-  // Save to database
-  await createOrder(orderId, order);
-
-  // Add to BullMQ queue
-  await orderQueue.add(
-    'sniper',
-    { orderId, order },
-    {
-      attempts: CONFIG.queue.maxRetries,
-      removeOnComplete: false,
-      removeOnFail: false,
-    }
-  );
-
-  console.log(`\n New order received: ${orderId}`);
-  console.log(`   Token: ${order.tokenAddress}`);
-  console.log(`   Amount: ${order.amountIn} SOL`);
-  console.log(`   Slippage: ${order.slippage}%`);
-
-  // Return order ID immediately
-  return reply.code(200).send({
-    orderId,
-    status: 'pending',
-    message: 'Order queued successfully. Connect to WebSocket for live updates.',
-    wsUrl: `ws://localhost:${CONFIG.port}/ws/orders/${orderId}`,
+  return reply.code(400).send({
+    error: 'WebSocket connection required',
+    message: 'Please connect via WebSocket to ws://localhost:3000/api/orders/execute and send order data as first message.',
   });
 });
 
-// WebSocket endpoint
-fastify.get('/ws/orders/:orderId', { websocket: true }, (socket, request) => {
-  const { orderId } = request.params as any;
+fastify.get('/api/orders/execute', { websocket: true }, async (socket, request) => {
+  console.log('\nWebSocket connection established');
 
-  console.log(`WebSocket connected for order: ${orderId}`);
+  let orderId: string | null = null;
+  let orderProcessed = false;
 
-  // Store socket connection
-  if (!wsConnections.has(orderId)) {
-    wsConnections.set(orderId, new Set());
-  }
-  wsConnections.get(orderId)!.add(socket);
+  // Wait for order data from client
+  socket.on('message', async (data) => {
+    // Only process the first message as order data
+    if (orderProcessed) {
+      return;
+    }
+    orderProcessed = true;
 
-  // Send initial connection message
-  socket.send(JSON.stringify({
-    orderId,
-    message: 'Connected to order status stream',
-    connected: true,
-  }));
+    let order: any;
+    try {
+      order = JSON.parse(data.toString());
+
+      if (!order || !order.tokenAddress || !order.amountIn || !order.slippage) {
+        socket.send(JSON.stringify({
+          error: 'Invalid order',
+          message: 'tokenAddress, amountIn, and slippage are required',
+        }));
+        socket.close();
+        return;
+      }
+    } catch (error: any) {
+      socket.send(JSON.stringify({
+        error: 'Invalid JSON',
+        message: error.message,
+      }));
+      socket.close();
+      return;
+    }
+
+    // Generate order ID
+    orderId = randomUUID();
+
+    console.log(`\n New order received: ${orderId}`);
+    console.log(`   Token: ${order.tokenAddress}`);
+    console.log(`   Amount: ${order.amountIn} SOL`);
+    console.log(`   Slippage: ${order.slippage}%`);
+
+    // Register socket for this order
+    if (!wsConnections.has(orderId)) {
+      wsConnections.set(orderId, new Set());
+    }
+    wsConnections.get(orderId)!.add(socket);
+
+    // Send orderId immediately via WebSocket
+    socket.send(JSON.stringify({
+      orderId,
+      status: 'pending',
+      message: 'Order received and queued. Streaming updates...',
+    }));
+
+    // Save to database
+    await createOrder(orderId, order);
+
+    // Add to BullMQ queue
+    await orderQueue.add(
+      'sniper',
+      { orderId, order },
+      {
+        attempts: CONFIG.queue.maxRetries,
+        removeOnComplete: false,
+        removeOnFail: false,
+      }
+    );
+  });
 
   // Handle disconnect
   socket.on('close', () => {
-    console.log(`WebSocket disconnected for order: ${orderId}`);
-    const connections = wsConnections.get(orderId);
-    if (connections) {
-      connections.delete(socket);
-      if (connections.size === 0) {
-        wsConnections.delete(orderId);
+    if (orderId) {
+      console.log(`WebSocket disconnected for order: ${orderId}`);
+      const connections = wsConnections.get(orderId);
+      if (connections) {
+        connections.delete(socket);
+        if (connections.size === 0) {
+          wsConnections.delete(orderId);
+        }
       }
+    } else {
+      console.log('WebSocket disconnected (no order was placed)');
     }
   });
 
   socket.on('error', (err: any) => {
-    console.error(`WebSocket error for order ${orderId}:`, err);
+    console.error(`WebSocket error:`, err);
   });
 });
 
@@ -468,12 +645,16 @@ async function start() {
     // Initialize database
     await initDatabase();
 
+    // Initialize Solana and DEX SDKs
+    await initSolana();
+
     // Start Fastify server
     await app.listen({ port: CONFIG.port, host: '0.0.0.0' });
 
     console.log('\n Sniper Order Execution Engine Started!');
     console.log(` HTTP Server: http://localhost:${CONFIG.port}`);
-    console.log(` WebSocket: ws://localhost:${CONFIG.port}/ws/orders/{orderId}`);
+    console.log(` WebSocket endpoint: ws://localhost:${CONFIG.port}/api/orders/execute`);
+    console.log(`   (Connect via WebSocket, then send order JSON as first message)`);
     console.log(` PostgreSQL: ${CONFIG.database.host}:${CONFIG.database.port}`);
     console.log(` Redis: ${CONFIG.redis.host}:${CONFIG.redis.port}`);
     console.log(` Workers: ${CONFIG.queue.concurrency} concurrent`);
