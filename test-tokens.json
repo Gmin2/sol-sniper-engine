@@ -1,0 +1,23 @@
+{
+  "token1": {
+    "name": "SNIPE1",
+    "mint": "B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP",
+    "tokenAccount": "BZemUJ6c6wfZ5TnNNZbeg3zQGMT2FsaVRp2zmdB87qhP",
+    "decimals": 9,
+    "supply": 1000000
+  },
+  "token2": {
+    "name": "SNIPE2",
+    "mint": "6NJBmZaQTpr5xbXqQUfc5iA6LoNp5RDNbdmiefG1TmTJ",
+    "tokenAccount": "8zo9ZW6HQvKp9GhuyvbsCy6Nqdu9Picar1EjbFJ874nW",
+    "decimals": 9,
+    "supply": 1000000
+  },
+  "token3": {
+    "name": "SNIPE3",
+    "mint": "Yzyxkh5P5qjCKNRd68mVRbwxBC4h3T9HYcppHjbYLhk",
+    "tokenAccount": "9U2g2sMF3XLjcuXv1TJsgmf7thpDSikHTAc8at7NJXeh",
+    "decimals": 9,
+    "supply": 1000000
+  }
+}

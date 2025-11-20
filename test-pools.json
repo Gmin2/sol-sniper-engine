@@ -1,0 +1,69 @@
+{
+  "createdAt": "2025-11-20T11:33:04.935Z",
+  "raydium-pool1": {
+    "name": "SNIPE1",
+    "poolId": "BmbSmAsSAgRWFLWCGte1fi9o5HUxJma3RgMWXvPnqwUh",
+    "tokenMint": "B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP",
+    "solMint": "So11111111111111111111111111111111111111112",
+    "txHash": "3Puy8ozv5THd7q4WueZD6YoivbkvU7aVb87pxkVkKRpSdBsv5ithJbcjnJfJbLEyNpV9RymNGLyTb4YBPpoVQiZm",
+    "tokenAmount": 100000,
+    "solAmount": 1,
+    "dex": "raydium"
+  },
+  "raydium-pool2": {
+    "name": "SNIPE2",
+    "poolId": "uSPp4EThPD3nnmF7kG1bfJ26xaDFfcLa6WFTHFbiwuW",
+    "tokenMint": "6NJBmZaQTpr5xbXqQUfc5iA6LoNp5RDNbdmiefG1TmTJ",
+    "solMint": "So11111111111111111111111111111111111111112",
+    "txHash": "2WWoJKGHAkNru7iVx1xZjj6nB5kJTt5MtbdPnRA6ZYzcRTvojCr1i9csW5YUyqzNH24rEj6qdvmo1eqpjCJEXpss",
+    "tokenAmount": 100000,
+    "solAmount": 1,
+    "dex": "raydium"
+  },
+  "raydium-pool3": {
+    "name": "SNIPE3",
+    "poolId": "91nWRnaNWpcveLwzwea8955LiWB6UpHyxz7FDXLHUAZe",
+    "tokenMint": "Yzyxkh5P5qjCKNRd68mVRbwxBC4h3T9HYcppHjbYLhk",
+    "solMint": "So11111111111111111111111111111111111111112",
+    "txHash": "4pWw3iXTf3FuQU2msxpUnvBfD973FtgZjMbMuYvsViyGjbmZ7JxhbJVFmtrFmPjfH9NagJRQAKNpCrYRQc4gVqLF",
+    "tokenAmount": 100000,
+    "solAmount": 1,
+    "dex": "raydium"
+  },
+  "meteora-pool1": {
+    "name": "SNIPE1",
+    "poolId": "9bNX6QXvTBoyGv1H3X2D81qTnmnWdPFCKjbMQ1VmjEjV",
+    "tokenMint": "B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP",
+    "solMint": "So11111111111111111111111111111111111111112",
+    "txHash": "5tG64gvSHC8R4sdBz4ghAmLFnsu9sSmBDHmTAcTcmEvXk8ADABUmMb6657bA7MYXWHsNAT5zkRWo2QjajEZ62JW",
+    "position": "Gk4g3SmC29S9N6SBiRhEksn68t6CCN9KNUW43SSeNmRt",
+    "positionNft": "9gGrxSX7yfmwHZxbmfbZcV7YYKdwMPG5W9hZgrY8P8g6",
+    "tokenAmount": 100000,
+    "solAmount": 1,
+    "dex": "meteora"
+  },
+  "meteora-pool2": {
+    "name": "SNIPE2",
+    "poolId": "B3kdQmC1UsaLEQGsSwjak5b1cnPUnfimZGPUtqoiVxdg",
+    "tokenMint": "6NJBmZaQTpr5xbXqQUfc5iA6LoNp5RDNbdmiefG1TmTJ",
+    "solMint": "So11111111111111111111111111111111111111112",
+    "txHash": "3jYWseEk6fPfrtfT3qGnyx1ETgBTyHd1PTqjEzUTg5QVzsDw1gZHH1iYG4piVpcTvuFKu7nB8vfgiGwr3xVLcXJ8",
+    "position": "Byg3qBxaixpr9KkcYnQzUNXAU3ju2eFniHfSMKyHCN1H",
+    "positionNft": "Cb8Qb8veSjWFubdp4McReztKWXH8Bu7F5RaAPx1hgofM",
+    "tokenAmount": 100000,
+    "solAmount": 1,
+    "dex": "meteora"
+  },
+  "meteora-pool3": {
+    "name": "SNIPE3",
+    "poolId": "8Fhse2pYgnZZiQikb4GSFqh5SWEoMSnWsyNxJ3Dra41E",
+    "tokenMint": "Yzyxkh5P5qjCKNRd68mVRbwxBC4h3T9HYcppHjbYLhk",
+    "solMint": "So11111111111111111111111111111111111111112",
+    "txHash": "2M7bfqaccbsyXkTjBebu4M6AKpiwc3v6DDJjj55D7GxesebT6hKmahCbqrNz4AFVwMC1Qqr74XGYSCYZ7zW32wpT",
+    "position": "EyVDJrgypdHNYVzNLLTUX34JWagswbMeEUCW3rfQN4yE",
+    "positionNft": "49mMZKH14JFyPc1RFj24BSFcBQMnFr5BR3R3K28LAYcX",
+    "tokenAmount": 100000,
+    "solAmount": 1,
+    "dex": "meteora"
+  }
+}
