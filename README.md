@@ -1,5 +1,7 @@
 # Sniper Order Execution Engine
 
+The api is deployed in production at [https://sol-sniper-engine-production.up.railway.app/health][https://sol-sniper-engine-production.up.railway.app/health]
+
 A high-performance order execution engine for Solana token sniping with intelligent DEX routing between Raydium and Meteora.
 
 ## 🎯 Features
@@ -475,6 +477,7 @@ Selected: Raydium (Better output by 18%)
 
 ## 🔗 Links
 
+- **Deployed Link**: `https://sol-sniper-engine-production.up.railway.app/health`
 - **Postman Collection**: `postman-collection.json`
 - **Test Pools**: `test-pools.json`
 - **Transaction Examples**: See Solana Explorer links in WebSocket responses
