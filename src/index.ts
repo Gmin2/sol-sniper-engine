@@ -40,6 +40,7 @@ async function initSolana() {
 
 // Create Fastify app
 const app = Fastify({
+  trustProxy: true,
   logger: {
     level: 'info',
     transport: {
@@ -61,6 +62,7 @@ app.register(websocket);
 const redisConnection = new Redis({
   host: CONFIG.redis.host,
   port: CONFIG.redis.port,
+  ...(CONFIG.redis.password && { password: CONFIG.redis.password }),
   maxRetriesPerRequest: null,
 });
 

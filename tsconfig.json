@@ -44,5 +44,6 @@
 
     "emitDeclarationOnly": true,
     "allowImportingTsExtensions": true,
+    "noEmit": true
   }
 }

@@ -44,11 +44,13 @@ export async function orderRoutes(fastify: FastifyInstance, orderQueue: Queue) {
     );
 
     // Return orderId - client upgrades connection to WebSocket on SAME endpoint
+    const protocol = request.protocol === 'https' ? 'wss' : 'ws';
+    const host = request.hostname;
     return reply.code(200).send({
       orderId,
       status: 'pending',
       message: 'Order queued. Upgrade connection to WebSocket for live updates.',
-      upgradeUrl: `ws://localhost:${CONFIG.port}/api/orders/execute?orderId=${orderId}`,
+      upgradeUrl: `${protocol}://${host}/api/orders/execute?orderId=${orderId}`,
     });
   });
 

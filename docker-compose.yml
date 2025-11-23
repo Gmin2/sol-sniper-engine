@@ -1,20 +1,49 @@
 version: '3.8'
 
 services:
+  app:
+    build: .
+    container_name: sniper_engine
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - PORT=3000
+      # Service Connections (Internal Docker Network)
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Database Credentials (must match postgres service)
+      - DB_NAME=${DB_NAME:-sniper_engine}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # App Config (passed from host .env)
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL}
+      - SOLANA_CLUSTER=${SOLANA_CLUSTER}
+      - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
+      - QUEUE_CONCURRENCY=${QUEUE_CONCURRENCY:-10}
+      - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
   postgres:
     image: postgres:16-alpine
     container_name: sniper_postgres
     environment:
-      POSTGRES_DB: sniper_engine
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-sniper_engine}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./src/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # - ./src/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,6 +51,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: sniper_redis
+    restart: always
     ports:
       - "6379:6379"
     volumes:
